@@ -3,6 +3,8 @@ Liveness based Flow sensitive Pointer Analysis (LFPA) Pass is a modified version
 
 * Supports : Global and Local Variables (pointers); all control flow constructs (if-else, while/for)
 * Future Scope : Structures and Arrays
+* This is an out of tree pass
+* Supports C and C++ input test files
 
 Directions for running :
 1. Install llvm and cmake
@@ -17,3 +19,4 @@ Utilities created:
 
 Directions for writing test cases :
 1. Make sure you include the header file -myHeader.h
+
