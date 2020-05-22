@@ -28,8 +28,6 @@ typedef struct LFPA {
 typedef struct lhsRhs {
 	std::pair<Value *,int> lhs;					//LHS operand of the inst
 	std::set<std::pair<Value *, int>> rhs;				//RHS operand of the inst
-	//int l_ind;					//indirection of lhs operand
-	//int r_ind;					//indirection of rhs operand
 }lhsRhs;
 
 /*
@@ -45,7 +43,6 @@ namespace {
 			std::map<Instruction *, LFPA> instAnalysisData;
 			std::map<Instruction *, lhsRhs> instOperandData;
 			std::map<Instruction *,std::tuple<Value *, Value *, PointsTo>> pointsToTest;
-			//std::map<Instruction *,std::set<std::pair<Value *, int>>> useMap;
 			std::map<Instruction *, operandInd> useMap;
 			
 		public :
@@ -328,7 +325,6 @@ namespace {
 			for(auto ii = bp->begin(); ii != bp->end(); ii++) {
 				ip = &(*ii);
 				auto ipStruct = instAnalysisData[ip];
-				//std::map<Value *, std::pair<std::set<Value *>, bool>> tINpa, tOUTpa;
 				pointerPointeeMap tINpa, tOUTpa;
 				
 				/*-----------------------calculate IN--------------------------*/
