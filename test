@@ -2,14 +2,14 @@
 
 #set -x
 export LLVM_HOME=usr/lib/llvm-9
-clang++-9 -S -emit-llvm lfpaTestSuite/test5.cpp #generates LLVM-IR in a text file (.ll)
-opt-9 -S -instnamer test5.ll -o test5.ll
+clang++-9 -S -emit-llvm lfpaTestSuite/test6.cpp #generates LLVM-IR in a text file (.ll)
+opt-9 -S -instnamer test6.ll -o test6.ll
 mkdir -p _build
 pushd _build
 cmake ..
 make
 popd
-clang++-9 -S -emit-llvm lfpaTestSuite/test5.cpp -o test.bc
+clang++-9 -S -emit-llvm lfpaTestSuite/test6.cpp -o test.bc
 opt-9 -instnamer -load _build/*/*lfpa* -lfpa test.bc > /dev/null
 #~/llvm-toolchain-8_8~svn353031/build-llvm/bin/opt -debug -instnamer -load _build/*/*SLVA* -slva test.bc > /dev/null
 #rm -rf _build test.bc

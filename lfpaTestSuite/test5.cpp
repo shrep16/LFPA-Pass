@@ -20,6 +20,8 @@ int main(){
 	doesNotPointsTo(y,p);
 	mayPointsTo(y,p);
 	mustPointsTo(y,p);
+	mustPointsTo(z,a);
+	mayPointsTo(z,b);
 	if(p < 3) 
 		**z = y;
 	else
@@ -32,5 +34,9 @@ int main(){
 	mustPointsTo(d,p);
 	mustPointsTo(e,p);
 	mustPointsTo(f,p);
+//int n;
+//	n = *c;
+//doesNotPointsTo(c,p);
+//return n;
 	return (*c + *d +*e + *f);
 }
