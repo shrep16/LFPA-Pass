@@ -11,6 +11,7 @@ Directions for running :
 2. Set the paths accordingly in the CMakeLists.txt and test(bash file)
 3. Write your tests and edit the path for same in test(bash file)
 4. ./test
+5. In order to print the pointer analysis output and strong liveness analysis output, uncomment the comments in the respective functions
 
 Utilities created:
 1. May points to
