@@ -20,6 +20,7 @@ Utilities created:
 
 Directions for writing test cases :
 1. Make sure you include the header file -myHeader.h
+2. Refer lfpaTestSuite/test5.cpp and lfpaTestSuite/test6.cpp
 
 For detailed documentation of the implementation refer : https://docs.google.com/document/d/1CLHMf6lyDE-exAeLnAtmUjcTEwOevsGziMJWizimEuo/edit
 
