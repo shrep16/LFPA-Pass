@@ -11,6 +11,7 @@ Directions for running :
 2. Set the paths accordingly in the CMakeLists.txt and test(bash file)
 3. Write your tests and edit the path for same in test(bash file)
 4. ./test
+5. In order to print the pointer analysis output and strong liveness analysis output, uncomment the comments in the respective functions
 
 Utilities created:
 1. May points to
@@ -19,4 +20,8 @@ Utilities created:
 
 Directions for writing test cases :
 1. Make sure you include the header file -myHeader.h
+2. Refer *lfpaTestSuite/test5.cpp* and *lfpaTestSuite/test6.cpp* for writing tests
+
+For detailed documentation of the implementation refer : https://docs.google.com/document/d/1CLHMf6lyDE-exAeLnAtmUjcTEwOevsGziMJWizimEuo/edit
+
 
