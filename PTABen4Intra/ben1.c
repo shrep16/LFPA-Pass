@@ -1,3 +1,4 @@
+//capture may points to of s in the loop
 #include "myHeader.h"
 int *a, *b, *w;
 int **c, **s;
@@ -26,6 +27,7 @@ int main(){
     }
 
     mustPointsTo(c,a);
+    mustPointsTo(s,a);
     while(u>10){
 	mustPointsTo(s,a);
 	mayPointsTo(s,a);
