@@ -16,10 +16,10 @@ using namespace llvm;
 * IN and OUT (fix-point solutions) for each instruction
 */
 typedef struct LFPA {
-	std::set<Value *> in_LA;					//IN set for Liveness Analysis
-	std::set<Value *> out_LA;					//OUT set for Liveness Analysis
-	std::map<Value *, std::pair<std::set<Value *>, bool>> in_PA;	//IN set for Pointer Analysis
-	std::map<Value *, std::pair<std::set<Value *>, bool>> out_PA;	//OUT set for Pointer Analysis
+	std::set<Value *> L_in;						//IN set for Liveness Analysis
+	std::set<Value *> L_out;					//OUT set for Liveness Analysis
+	std::map<Value *, std::pair<std::set<Value *>, bool>> A_in;	//IN set for Pointer Analysis
+	std::map<Value *, std::pair<std::set<Value *>, bool>> A_out;	//OUT set for Pointer Analysis
 }LFPA;
 
 /*
@@ -55,13 +55,15 @@ namespace {
 			void findOperands(Value *, int, Instruction *);
 			void printLhsRhs();
 			bool strongLivenessAnalysis(Function *);
-			void pointerAnalysis(Function *);
+			bool pointerAnalysis(Function *);
 			void printPointsToTestsAnswers();
 			bool whetherDefnFreePathExists(Value *, LFPA);
 			std::set<Instruction *> getPredecessors(BasicBlock::iterator, BasicBlock *);
 			std::set<Value *> getDefRefSet(Value *, pointerPointeeMap, int *, bool *);
 			std::set<Instruction *> getSuccessors(BasicBlock::reverse_iterator, BasicBlock *);
-			std::set<Value *> getMayRefVariables(pointerPointeeMap ,operandInd ,std::set<Value *>);
+			std::set<Value *> getMayRefVariables(pointerPointeeMap ,operandInd ,std::set<Value *>, bool);
+			bool isLiveIn(std::set<Value *>, std::set<Value *>);
+			std::set<Value *> getMayKillSet(pointerPointeeMap, Value *, std::set<Value *> *, bool *, int *);
 	};//end Lfpa
 
 	/*
@@ -78,17 +80,24 @@ namespace {
 
 /*--------------------Perform Analysis----------------------*/
 		//int itCnt = 0;
-		bool changed;
+		bool changed,cL,cP;
 		do {
 			changed = false;
+			cL = false;
+			cP = false;
 //errs()<<"iteration"<<itCnt<<"\n";
-			changed = strongLivenessAnalysis(fp);
-			pointerAnalysis(fp);
-			if(!changed) {
-				printPointsToTestsAnswers();	
-			}	
+//if strongLivenessAnalysis is true but pointerAnalysis is false then changed is false
+			//changed = strongLivenessAnalysis(fp);
+			//pointerAnalysis(fp);
+			cL = strongLivenessAnalysis(fp);
+			cP = pointerAnalysis(fp);
+			if(/*strongLivenessAnalysis(fp) && pointerAnalysis(fp)*/cL && cP) {
+				changed = true;
+				//errs()<<"cL = "<<cL<<" cP = "<<cP<<"\n";
+			} else{
+				printPointsToTestsAnswers();
+			}
 			//itCnt++;
-
 		}while(changed);
 			
 /*--------------------Perform Analysis----------------------*/
@@ -99,27 +108,27 @@ namespace {
 		for(auto test : pointsToTest) {
 			Instruction *ip = test.first;
 			auto ipStruct = instAnalysisData[ip];
-			auto inPA = ipStruct.in_PA;
+			auto A_in = ipStruct.A_in;
 			Value *op1, *op2;
 			PointsTo type;
 			std::tie(op1, op2, type) = test.second;
 
 			if(type == mayPointsTo) {
 				errs()<<op1->getName()<<" may points to "<<op2->getName() <<" : ";
-				if(inPA.find(op1) != inPA.end()) {
-					if(inPA[op1].first.find(op2) != inPA[op1].first.end()) {
+				if(A_in.find(op1) != A_in.end()) {
+					if(A_in[op1].first.find(op2) != A_in[op1].first.end()) {
 						errs()<<"Yes\n";
 					} else {
 						errs()<<"No\n";
 					}
 				} else {
-					errs()<<"No\n";
+					errs()<<"Not live\n";
 				}
 			} else if(type == mustPointsTo) {
 				errs()<<op1->getName()<<" must points to "<<op2->getName() <<" : ";
-				if(inPA.find(op1) != inPA.end()) {
-					if(inPA[op1].first.find(op2) != inPA[op1].first.end()) {
-						if((inPA[op1].first.size() == 1) && (inPA[op1].second == false)) {
+				if(A_in.find(op1) != A_in.end()) {
+					if(A_in[op1].first.find(op2) != A_in[op1].first.end()) {
+						if((A_in[op1].first.size() == 1) && (A_in[op1].second == false)) {
 							errs()<<"Yes\n";
 						} else {
 							errs()<<"No\n";
@@ -128,17 +137,17 @@ namespace {
 						errs()<<"No\n";
 					}
 				} else {
-					errs()<<"No\n";
+					errs()<<"Not live\n";
 				}
 			} else {
 				errs()<<op1->getName()<<" does not points to "<<op2->getName() <<" : ";
-				if(inPA.find(op1) != inPA.end()) {
-					if(inPA[op1].first.find(op2) == inPA[op1].first.end())
+				if(A_in.find(op1) != A_in.end()) {
+					if(A_in[op1].first.find(op2) == A_in[op1].first.end())
 						errs()<<"Yes\n";
 					else
 						errs()<<"No\n";
 				} else 
-					errs()<<"Yes\n";
+					errs()<<"Yes not live\n";
 			}
 		}
 	}//Lfpa::printPointsToTestsAnswers
@@ -157,31 +166,76 @@ namespace {
 		
 	}//Lfpa::getSuccessors
 
-	std::set<Value *> Lfpa::getMayRefVariables(pointerPointeeMap INpa, operandInd opd, std::set<Value *> INla) {
+	/*
+	* - calculates ref_n
+	* and inserts in IN
+	*/
+	std::set<Value *> Lfpa::getMayRefVariables(pointerPointeeMap A_in, operandInd opd, std::set<Value *> L_in, bool useInst) {
 		std::set<Value *> refSet, tempSet;
 		int ind;
-		for(auto it : opd) {//there will be only one rhs
-			refSet.clear();//check
+		for(auto it : opd) {
+			refSet.clear();
 			refSet.insert(it.first);
-			INla.insert(it.first);
 			ind = it.second;
+
+			if(useInst || (!useInst && ind != -1))
+				L_in.insert(it.first);
+
+
 			while(ind > -1 && refSet.size() > 0) {
+				ind--;
 				for(auto itValue : refSet) {
-					if(INpa.find(itValue) != INpa.end()) {
-						for(auto itVal : INpa.find(itValue)->second.first) {
+					if(A_in.find(itValue) != A_in.end()) {
+						for(auto itVal : A_in.find(itValue)->second.first) {
 							tempSet.insert(itVal);
-							INla.insert(itVal);
+							if(useInst || (!useInst && ind != -1))
+								L_in.insert(itVal);
 						}
 										
 					}
 				}
 				refSet = tempSet;
 				tempSet.clear();
-				ind--;
+				
 			}
 		}
-		return INla;
+		return L_in;
 	}//Lfpa::getMayRefVariables
+
+	/*
+	* returns true, if any one of the variables are present in L_out, so that the rhs should be found only if lhs is live in L_out
+	*/
+	inline bool Lfpa::isLiveIn(std::set<Value *> lhsSet, std::set<Value *> L_out) {
+		for(auto itVal : lhsSet) {
+			if(L_out.find(itVal) != L_out.end()) 
+				return true;
+		}
+		return false;
+		
+	}//Lfpa::isLiveIn
+
+	std::set<Value *> Lfpa::getMayKillSet(pointerPointeeMap A_in, Value *lOp, std::set<Value *> *L_in, bool *defnFreeLhs, int *ind) {
+		std::set<Value *> mayKillSet, tempSet;
+		mayKillSet.insert(lOp);
+						
+		while(*ind > -1 && mayKillSet.size() > 0 ) {
+			for(auto itVal : mayKillSet) {
+				L_in->insert(itVal);
+				if(A_in.find(itVal) != A_in.end()) {
+					if(A_in.find(itVal)->second.second == true)
+						*defnFreeLhs = true;
+					for(auto it : A_in.find(itVal)->second.first) {
+						tempSet.insert(it);
+					}
+				}
+			}
+			mayKillSet = tempSet;
+			tempSet.clear();
+			*ind = *ind -1;
+		}
+		return mayKillSet;
+						
+	}//Lfpa::getMayKillSet
 
 	bool Lfpa::strongLivenessAnalysis(Function *fp) {
 		BasicBlock *bp;
@@ -195,81 +249,63 @@ namespace {
 				ip = &(*ii);
 				
 				auto ipStruct = instAnalysisData[ip];
-				std::set<Value *> tINla,tOUTla;
+				std::set<Value *> tL_in,tL_out;
 
 				/*---------------------------calculate OUT----------------------------*/
 				for(auto succIp : getSuccessors(ii, bp)) {
 					auto suc_i_struct = instAnalysisData[succIp];
-					for(auto itVal : suc_i_struct.in_LA)
-						tOUTla.insert(itVal);
+					for(auto itVal : suc_i_struct.L_in)
+						tL_out.insert(itVal);
 				}
-		
+
+				
 				/*--------------------------calculate IN-----------------------------*/
+				
+				tL_in = tL_out;
+
 				if(isa<StoreInst>(ip)) {
 					auto op = instOperandData[ip];
 					auto lOp = op.lhs;
 					auto rOp = op.rhs;
-					auto INpa = ipStruct.in_PA;
-	
-					if(lOp.second == -1) {
-						tINla = tOUTla;
-						if(tOUTla.find(lOp.first) != tOUTla.end()) {
-							tINla.erase(lOp.first);	//erase the LHS
-							tINla = getMayRefVariables(INpa,rOp,tINla);
+					auto A_in = ipStruct.A_in;
+					
+					std::set<Value *> lhsSet;
+					bool defnFreeLhs = false;
+					int ind = lOp.second;
+					Value *v = lOp.first;
+					lhsSet = getMayKillSet(A_in, lOp.first, &tL_in, &defnFreeLhs, &ind);
+					if(ind == -1) {
+						if(lhsSet.size() == 1 && !defnFreeLhs) { //must-kill
+							auto killVal = lhsSet.begin();
+							tL_in.erase(*killVal);
 						}
-					} else {
-						//mayDef-begin
-						std::set<Value *> lhsSet, tempSet;
-						lhsSet.insert(lOp.first);
-						int ind = lOp.second;
-						while(ind > -1 && lhsSet.size() > 0 ) {
-							for(auto itVal : lhsSet) {
-								tINla.insert(itVal);
-								if(INpa.find(itVal) != INpa.end()) {
-									for(auto it : INpa.find(itVal)->second.first) {
-										tempSet.insert(it);
-									}
-								}
-							}
-							lhsSet = tempSet;
-							tempSet.clear();
-							ind--;
-						}//mayDef-end
-						if(ind == -1) { //*x=y case
-							for(auto itVal : lhsSet) {
-								if(tOUTla.find(itVal) != tOUTla.end()) {
-									tINla = getMayRefVariables(INpa,rOp,tINla);
-								}
-							}
-						}	
+						if(isLiveIn(lhsSet,tL_out)) //strong liveness
+							tL_in = getMayRefVariables(A_in,rOp,tL_in,false);
 					}
+
 				} else if(isa<ICmpInst>(ip) || isa<ReturnInst>(ip)) {
-
-					tINla = tOUTla;
 					auto use = useMap[ip];
-					auto INpa = ipStruct.in_PA;
-					tINla = getMayRefVariables(INpa,use,tINla);
+					auto A_in = ipStruct.A_in;
+					tL_in = getMayRefVariables(A_in,use,tL_in,true);
 
-				} else {
-					tINla = tOUTla;
-				}
+				} 
 
-				if(tINla != ipStruct.in_LA || tOUTla != ipStruct.out_LA) {
+				if(tL_in != ipStruct.L_in || tL_out != ipStruct.L_out) {
 					changed = true;
-					ipStruct.in_LA = tINla;
-					ipStruct.out_LA = tOUTla;
+					ipStruct.L_in = tL_in;
+					ipStruct.L_out = tL_out;
 					instAnalysisData[ip] = ipStruct;
 				}
 
 
 				/*errs()<<"-----------------------------inst"<<ip<<"--------------------------\n";
 			errs()<<"IN la :\n";
-			for(auto it : tINla) 
+			for(auto it : tL_in) 
 				errs()<<it->getName()<<", ";
 			errs()<<"\n";
 
 			errs()<<"OUT la :\n";
-			for(auto it : tOUTla)
+			for(auto it : tL_out)
 				errs()<<it->getName()<<", ";
 			errs()<<"\n";*/
 
@@ -293,19 +329,23 @@ namespace {
 			ii--;
 			predInstSet.insert(&(*ii));
 		}
+		
 		return predInstSet;
 	}//Lfpa::getPredecessors
 
-	//for pointer analysis
-	std::set<Value *> Lfpa::getDefRefSet(Value *op, pointerPointeeMap INpa, int *ind, bool *defnFreePath) {
+	
+	/*
+	* calculates pointee_n and def_n	
+	*/
+	std::set<Value *> Lfpa::getDefRefSet(Value *op, pointerPointeeMap A_in, int *ind, bool *defnFreePath) {
 		std::set<Value *> defRefSet, tempSet;
 		defRefSet.insert(op);
 		while(*ind > -1 && defRefSet.size()>0) {
 			for(auto itVal : defRefSet) {
-				if(INpa.find(itVal) != INpa.end()) {
-					if(INpa.find(itVal)->second.second == true)
+				if(A_in.find(itVal) != A_in.end()) {
+					if(A_in.find(itVal)->second.second == true)
 						*defnFreePath = true;
-					for(auto it : INpa.find(itVal)->second.first)
+					for(auto it : A_in.find(itVal)->second.first)
 						tempSet.insert(it);
 				}
 			}
@@ -316,36 +356,39 @@ namespace {
 		return defRefSet;
 	}//Lfpa::getDefRefSet
 
-	void Lfpa::pointerAnalysis(Function *fp) {
+	bool Lfpa::pointerAnalysis(Function *fp) {
 		BasicBlock *bp;
 		Instruction *ip;
+		bool changed = false;
 		//iterating in forward manner
 		for(auto bb = fp->begin(); bb != fp->end(); bb++) {
 			bp = &(*bb);
 			for(auto ii = bp->begin(); ii != bp->end(); ii++) {
 				ip = &(*ii);
 				auto ipStruct = instAnalysisData[ip];
-				pointerPointeeMap tINpa, tOUTpa;
+				pointerPointeeMap tA_in, tA_out;
 				
 				/*-----------------------calculate IN--------------------------*/
 				
-				for(auto itVal : ipStruct.in_LA) {
+				for(auto itVal : ipStruct.L_in) {
 					if(itVal->getType()->getContainedType(0)->isPointerTy()) {
-						if(tINpa.find(itVal) != tINpa.end()) {
+						if(tA_in.find(itVal) != tA_in.end()) {
 							std::set<Value *> pointees;		
-							tINpa.insert(std::pair<Value *, std::pair<std::set<Value*>, bool>>(itVal, std::make_pair(pointees, false)));	//since the variable has not been defined
+							tA_in.insert(std::pair<Value *, std::pair<std::set<Value*>, bool>>(itVal, std::make_pair(pointees, false)));	
 						}
 
 						bool defnFreePath = false;
-						for(auto predIp : getPredecessors(ii,bp)) {
+						auto predInstSet = getPredecessors(ii,bp);
+				
+						for(auto predIp : predInstSet) {
 							auto pred_struct = instAnalysisData[predIp];
 							if(whetherDefnFreePathExists(itVal,pred_struct))
 								defnFreePath = true;
 							
-							for(auto itValue : pred_struct.out_PA[itVal].first)
-								tINpa[itVal].first.insert(itValue);		
+							for(auto itValue : pred_struct.A_out[itVal].first)
+								tA_in[itVal].first.insert(itValue);		
 						}
-						tINpa[itVal].second = defnFreePath;
+						tA_in[itVal].second = defnFreePath;
 					}
 				}
 
@@ -353,15 +396,15 @@ namespace {
 
 				
 
-				for(auto itVal : tINpa) {
-					if(ipStruct.out_LA.find(itVal.first) != ipStruct.out_LA.end()) {
-						if(tOUTpa.find(itVal.first) == tOUTpa.end()) {
+				for(auto itVal : tA_in) {
+					if(ipStruct.L_out.find(itVal.first) != ipStruct.L_out.end()) {
+						if(tA_out.find(itVal.first) == tA_out.end()) {
 							std::set<Value *> pointees;			
-							tOUTpa.insert(std::pair<Value *, std::pair<std::set<Value*>, bool>>(itVal.first, std::make_pair(pointees, false)));	
+							tA_out.insert(std::pair<Value *, std::pair<std::set<Value*>, bool>>(itVal.first, std::make_pair(pointees, false)));	
 						}
-						tOUTpa[itVal.first].second = tINpa[itVal.first].second;
-						for(auto itValue : tINpa[itVal.first].first)
-							tOUTpa[itVal.first].first.insert(itValue);
+						tA_out[itVal.first].second = tA_in[itVal.first].second;
+						for(auto itValue : tA_in[itVal.first].first)
+							tA_out[itVal.first].first.insert(itValue);
 					}
 				}
 
@@ -377,8 +420,8 @@ namespace {
 							indR = rOp.begin()->second;
 							bool defnFreeLhs = false, defnFreeRhs = false;
 
-							lhsSet = getDefRefSet(lOp.first, tINpa, &indL, &defnFreeLhs); //def set
-							rhsSet = getDefRefSet(rOp.begin()->first, tINpa, &indR, &defnFreeRhs); //ref set
+							lhsSet = getDefRefSet(lOp.first, tA_in, &indL, &defnFreeLhs); //def set
+							rhsSet = getDefRefSet(rOp.begin()->first, tA_in, &indR, &defnFreeRhs); //pointee set
 							
 /*errs()<<"lhs set :";
 for(auto it : lhsSet)
@@ -391,22 +434,22 @@ for(auto it : rhsSet)
 errs()<<"\n";*/
 							if(indR == -1 && indL == -1) {
 								for(auto itVal : lhsSet) {
-									if(ipStruct.out_LA.find(itVal) != ipStruct.out_LA.end()) {
-										if(tOUTpa.find(itVal) == tOUTpa.end()) {
+									if(ipStruct.L_out.find(itVal) != ipStruct.L_out.end()) {
+										if(tA_out.find(itVal) == tA_out.end() && rhsSet.size() != 0) {
 											std::set<Value *> pointees;
-											tOUTpa.insert(std::pair<Value *, std::pair<std::set<Value*>, bool>>(itVal,std::make_pair(pointees, false)));	
+											tA_out.insert(std::pair<Value *, std::pair<std::set<Value*>, bool>>(itVal,std::make_pair(pointees, false)));	
 										}
-										if(lhsSet.size() == 1 && rhsSet.size() == 1 &&
-										   !defnFreeRhs && !defnFreeLhs)
-											tOUTpa[itVal].first.clear();
+										if(lhsSet.size() == 1 /*&& rhsSet.size() == 1*/ 
+										   /*!defnFreeRhs*/ && !defnFreeLhs)
+											tA_out[itVal].first.clear();//must update //kill
 
 										if(rhsSet.size() == 0 || defnFreeRhs)
-											tOUTpa[itVal].second = true; //no definition obtained
+											tA_out[itVal].second = true; //no definition obtained
 										else
-											tOUTpa[itVal].second = false;
+											tA_out[itVal].second = false;
 
-										for(auto itVals : rhsSet){
-											tOUTpa[itVal].first.insert(itVals);
+										for(auto itVals : rhsSet){	//def_n X pointee_n
+											tA_out[itVal].first.insert(itVals);
 										 
 										}
 									}
@@ -416,15 +459,20 @@ errs()<<"\n";*/
 						}
 					}
 				}
-				ipStruct.in_PA = tINpa;
-				ipStruct.out_PA = tOUTpa;
-				instAnalysisData[ip] = ipStruct;
+				
+
+				if(tA_in != ipStruct.A_in || tA_out != ipStruct.A_out) {
+					changed = true;
+					ipStruct.A_in = tA_in;
+					ipStruct.A_out = tA_out;
+					instAnalysisData[ip] = ipStruct;
+				}
 
 
 /*errs()<<"-----------------------------inst"<<ip<<"--------------------------\n";
 
 errs()<<"IN pa :\n";
-			for(auto it : tINpa) {
+			for(auto it : tA_in) {
 				errs()<<it.first->getName()<<" -> ";
 				auto itSet = it.second.first;
 				for(auto itVal : itSet)
@@ -435,7 +483,7 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 			}
 
 			errs()<<"OUT pa :\n";
-			for(auto it : tOUTpa) {
+			for(auto it : tA_out) {
 				errs()<<it.first->getName()<<" -> ";
 				auto itSet = it.second.first;
 				for(auto itVal : itSet)
@@ -448,12 +496,13 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 			
 			}
 		}
+		return changed;
 	}//Lfpa::pointerAnalysis
 
 	inline bool Lfpa::whetherDefnFreePathExists(Value *itVal, LFPA pred_struct) {
-		if((pred_struct.out_PA.find(itVal) == pred_struct.out_PA.end()) || 
-		   (pred_struct.out_PA[itVal].first.size() == 0) || 
-                   (pred_struct.out_PA[itVal].second == true))
+		if((pred_struct.A_out.find(itVal) == pred_struct.A_out.end()) || 
+		   (pred_struct.A_out[itVal].first.size() == 0) || 
+                    pred_struct.A_out[itVal].second == true)
 			return true;
 		return false;
 	}//Lfpa::whetherDefnFreePathExists
@@ -477,7 +526,7 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 					std::set<std::pair<Value *, int>> op2;
 					lhsRhs opStruct = {op1, op2};
 					instOperandData[ip] = opStruct;
-
+					
 					findOperands(ip->getOperand(1),1,ip);
 					findOperands(ip->getOperand(0),0,ip);
 
@@ -503,10 +552,10 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 
 				} else if(isa<ICmpInst>(ip) || isa<ReturnInst>(ip)) {
 					useMap[ip];
-					int i=0;
-					for(User::op_iterator oi = ip->op_begin(), eo = ip->op_end(); eo != oi; oi++,i++) {
+					
+					for(int i=0, numOp = ip->getNumOperands(); i < numOp; i++) {
 						Value *op = ip->getOperand(i);
-						if(op != (Value *)ip && !isa<ConstantData>(op))
+						if(!isa<ConstantData>(op))
 							findOperands(op,2,ip);
 					}
 					
@@ -548,10 +597,9 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 					if(!isa<ConstantData>(ti))
 						 st.push(std::make_pair(ti,ele.second+1));
 				}else {
-					int i=0;
-					for(User::op_iterator oi = tip->op_begin(), eo = tip->op_end(); eo != oi; oi++,i++) {
+					for(int i=0, numOp = tip->getNumOperands(); i < numOp; i++) {
 						Value *ti = tip->getOperand(i);						
-						if((ele.first != ti) && !isa<ConstantData>(ti)) {
+						if(!isa<ConstantData>(ti)) {
 							st.push(std::make_pair(ti,ele.second));
 						}
 					}
@@ -611,9 +659,9 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 	* initLFPAstruct - inserts the various data structures in LFPA struct
 	*/
 	inline void Lfpa::initLFPAstruct(Instruction *ip) {
-		std::set<Value *> INla, OUTla;
-		std::map<Value *, std::pair<std::set<Value *>,bool>> INpa, OUTpa;
-		LFPA lfpaStruct = {INla, OUTla, INpa, OUTpa};
+		std::set<Value *> L_in, L_out;
+		pointerPointeeMap A_in, A_out;
+		LFPA lfpaStruct = {L_in, L_out, A_in, A_out};
 		instAnalysisData.insert(std::pair<Instruction *, LFPA>(ip, lfpaStruct));
 	}//Lfpa::initLFPAstruct
 
