@@ -6,6 +6,7 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/IR/GlobalVariable.h"
 #include <cxxabi.h>
 #include <cassert>
 
@@ -356,6 +357,7 @@ namespace {
 		return defRefSet;
 	}//Lfpa::getDefRefSet
 
+
 	bool Lfpa::pointerAnalysis(Function *fp) {
 		BasicBlock *bp;
 		Instruction *ip;
@@ -369,7 +371,7 @@ namespace {
 				pointerPointeeMap tA_in, tA_out;
 				
 				/*-----------------------calculate IN--------------------------*/
-				
+				auto predInstSet = getPredecessors(ii,bp);
 				for(auto itVal : ipStruct.L_in) {
 					if(itVal->getType()->getContainedType(0)->isPointerTy()) {
 						if(tA_in.find(itVal) != tA_in.end()) {
@@ -378,15 +380,27 @@ namespace {
 						}
 
 						bool defnFreePath = false;
-						auto predInstSet = getPredecessors(ii,bp);
-				
-						for(auto predIp : predInstSet) {
-							auto pred_struct = instAnalysisData[predIp];
-							if(whetherDefnFreePathExists(itVal,pred_struct))
-								defnFreePath = true;
+
+						if(predInstSet.size()==0) {
+							if(isa<GlobalVariable>(itVal)) {
+								GlobalVariable *it = (GlobalVariable *)(itVal);
+								if(it->hasInitializer()) {
+									auto opd = ((Instruction *)(itVal))->getOperand(0);
+									if(((Constant *)(opd))->isNullValue())
+										defnFreePath = true;
+									else
+										tA_in[itVal].first.insert(opd);
+								}
+							}
+						} else {
+							for(auto predIp : predInstSet) {
+								auto pred_struct = instAnalysisData[predIp];
+								if(whetherDefnFreePathExists(itVal,pred_struct))
+									defnFreePath = true;
 							
-							for(auto itValue : pred_struct.A_out[itVal].first)
-								tA_in[itVal].first.insert(itValue);		
+								for(auto itValue : pred_struct.A_out[itVal].first)
+									tA_in[itVal].first.insert(itValue);		
+							}
 						}
 						tA_in[itVal].second = defnFreePath;
 					}

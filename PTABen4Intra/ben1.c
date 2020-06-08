@@ -1,39 +1,26 @@
-//capture may points to of s in the loop
 #include "myHeader.h"
-int *a, *b, *w;
-int **c, **s;
-int x, y;
-int u;
+struct agg{
+
+	int* f;
+	int *g;
+
+}agg;
+
+int a1, b1,c1;
+int *a, *b,*c;
+struct agg temp;
+
 int main(){
-
-    
-    a=&x;
-    b=&y;
-    c=&a;
-    s = c;
-    mustPointsTo(s,a);
-    //s=&w;
-    w=&u;
-    mustPointsTo(w,u);
-    u = 9;
-     
-    if(x==5){
-    	mustPointsTo(c,a);
-	mustPointsTo(a,x);
-    	**c = 10;
-    }
-    else{
-	*b = 100;
-    }
-
-    mustPointsTo(c,a);
-    mustPointsTo(s,a);
-    while(u>10){
-	mustPointsTo(s,a);
-	mayPointsTo(s,a);
-	**s = 100;
-    }
-
-    return 0;
+	struct agg agg1[100];
+	a = &a1;
+	b = &b1;
+	mustPointsTo(a,a1);
+	mustPointsTo(b,b1);
+	
+	agg1[1].f = a;
+	agg1[1].g = b;
+	mustPointsTo(a,a1);
+	mustPointsTo(b,b1);
+	//agg1[0].f = &c;
 
 }
