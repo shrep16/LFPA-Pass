@@ -29,6 +29,7 @@ Test Cases :
 Under-construction :
 1. test.sh (for both C and C++)
 
-For detailed documentation of the implementation refer : https://docs.google.com/document/d/1CLHMf6lyDE-exAeLnAtmUjcTEwOevsGziMJWizimEuo/edit
+Presentation(contains the newest version of algorithm) : https://docs.google.com/presentation/d/1Lu--EV4rWhoLj0a8NTK8L5s_gl4O3FP_oCqhd9qSmA0/edit?usp=sharing
+(old algorithm)For detailed documentation of the implementation refer : https://docs.google.com/document/d/1CLHMf6lyDE-exAeLnAtmUjcTEwOevsGziMJWizimEuo/edit
 
 
