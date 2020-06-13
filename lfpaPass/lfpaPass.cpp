@@ -40,20 +40,23 @@ namespace {
 	class Lfpa {
 		private :
 			using pointerPointeeMap = std::map<Value *, std::pair<std::set<Value *>, bool>>;
-			using operandInd = std::set<std::pair<Value *, int>>;
+			using operand = std::pair<Value *, int>;
+			//using operandInd = std::set<std::pair<Value *, int>>;
+			using operandSet = std::set<operand>;
 			std::map<Instruction *, LFPA> instAnalysisData;
 			std::map<Instruction *, lhsRhs> instOperandData;
-			std::map<Instruction *,std::tuple<Value *, Value *, PointsTo>> pointsToTest;
-			std::map<Instruction *, operandInd> useMap;
+			std::map<Instruction *,std::tuple<operand, operand, PointsTo>> pointsToTest;
+			std::map<Instruction *, operandSet> useMap;
 			
 		public :
+			
 			void run(Function *);
 			void initContext(Function *);
 			void initLFPAstruct(Instruction *);
 			std::string getOriginalName(Function *);
 			std::string demangle(const char *);
-			void printPointsToTests();
-			void findOperands(Value *, int, Instruction *);
+			//void printPointsToTests();
+			operandSet findOperands(Value *, bool);
 			void printLhsRhs();
 			bool strongLivenessAnalysis(Function *);
 			bool pointerAnalysis(Function *);
@@ -62,9 +65,12 @@ namespace {
 			std::set<Instruction *> getPredecessors(BasicBlock::iterator, BasicBlock *);
 			std::set<Value *> getDefRefSet(Value *, pointerPointeeMap, int *, bool *);
 			std::set<Instruction *> getSuccessors(BasicBlock::reverse_iterator, BasicBlock *);
-			std::set<Value *> getMayRefVariables(pointerPointeeMap ,operandInd ,std::set<Value *>, bool);
+			std::set<Value *> getMayRefVariables(pointerPointeeMap ,operandSet ,std::set<Value *>, bool);
 			bool isLiveIn(std::set<Value *>, std::set<Value *>);
 			std::set<Value *> getMayKillSet(pointerPointeeMap, Value *, std::set<Value *> *, bool *, int *);
+			//void printOperand(std::set<Value *>, bool);
+			void printOperand(operand);
+			PointsTo whetherPointsTo(std::set<Value *>, std::set<Value *>, pointerPointeeMap, bool, bool);
 	};//end Lfpa
 
 	/*
@@ -105,18 +111,95 @@ namespace {
 	}//Lfpa::run
 
 
+/*	std::set<Value *> getActualVariables(operand opd, Instruction *ip, bool *defnFreePath) {
+		std::set<Value *> opdSet, tempSet;
+		
+		return opdSet;
+	}*/
+	
+	inline void Lfpa::printOperand(operand opd) {
+		int ind = opd.second;
+		while(ind > -1) {
+			errs()<<"*";
+			ind--;
+		}
+		
+		errs()<<opd.first->getName();
+		/*for(auto op : opdSet)
+			errs()<<op->getName()<<", ";
+		if(defnFreePath)
+			errs()<<"? ";*/
+	}//Lfpa::printOperand
+	
+	inline PointsTo Lfpa::whetherPointsTo(std::set<Value *> opd1Set, std::set<Value *> opd2Set, pointerPointeeMap A_in, bool defnFreeOpd1, bool defnFreeOpd2) {
+			PointsTo ptsTo = doesNotPointsTo;
+			for(auto ptr : opd1Set) {
+				if(A_in.find(ptr) != A_in.end()) {//ptr could be an integer as well
+					for(auto pte : opd2Set) {
+						if(A_in[ptr].first.find(pte) != A_in[ptr].first.end()) {
+							ptsTo = mayPointsTo;
+							break;
+						}
+					}
+				}
+			}
+
+			if(ptsTo == mayPointsTo) {
+				//check for must points to
+				if(opd1Set.size() == 1 && opd2Set.size() == 1 && !defnFreeOpd1 && !defnFreeOpd2) {
+					if((A_in[*(opd1Set.begin())].first.size() == 1) && (A_in[*(opd1Set.begin())].second == false))
+						ptsTo = mustPointsTo;
+				}
+			}
+		return ptsTo;
+	}//Lfpa::whetherPointsTo
+
 	void Lfpa::printPointsToTestsAnswers() {
+		//errs()<<"size = "<<pointsToTest.size()<<"\n";
 		for(auto test : pointsToTest) {
 			Instruction *ip = test.first;
 			auto ipStruct = instAnalysisData[ip];
 			auto A_in = ipStruct.A_in;
-			Value *op1, *op2;
+			
+			//Value *op1, *op2;
+			bool defnFreeOpd1 = false, defnFreeOpd2 = false;
 			PointsTo type;
-			std::tie(op1, op2, type) = test.second;
+			operand opd1, opd2;
+			std::tie(opd1, opd2, type) = test.second;
+
+			int opd1Ind = opd1.second;
+			int opd2Ind = opd2.second;
+			auto opd1Set = getDefRefSet(opd1.first, A_in, &opd1Ind, &defnFreeOpd1);
+			auto opd2Set = getDefRefSet(opd2.first, A_in, &opd2Ind, &defnFreeOpd2);
+			
+			if(opd1Ind != -1 || opd2Ind != -1) {
+				errs()<<"No variables found!\n";
+				continue;
+			}
+
+			auto L_in = ipStruct.L_in;
+			PointsTo ptsTo;
+
+			printOperand(opd1);
+			if(isLiveIn(opd1Set, L_in)) {
+				ptsTo = whetherPointsTo(opd1Set, opd2Set, A_in, defnFreeOpd1, defnFreeOpd2);
+			} else {
+				errs()<<" not live\n";
+				continue;
+			}
 
 			if(type == mayPointsTo) {
-				errs()<<op1->getName()<<" may points to "<<op2->getName() <<" : ";
-				if(A_in.find(op1) != A_in.end()) {
+
+				
+				errs()<<" may points to ";
+				printOperand(opd2);
+				if(ptsTo != doesNotPointsTo)
+					errs()<<" :Yes\n";
+				else
+					errs()<<" :No\n";
+
+				//errs()<<op1->getName()<<" may points to "<<op2->getName() <<" : ";
+				/*if(A_in.find(op1) != A_in.end()) {
 					if(A_in[op1].first.find(op2) != A_in[op1].first.end()) {
 						errs()<<"Yes\n";
 					} else {
@@ -124,10 +207,21 @@ namespace {
 					}
 				} else {
 					errs()<<"Not live\n";
-				}
+				}*/
+
+				
 			} else if(type == mustPointsTo) {
-				errs()<<op1->getName()<<" must points to "<<op2->getName() <<" : ";
-				if(A_in.find(op1) != A_in.end()) {
+
+				errs()<<" must points to ";
+				printOperand(opd2);
+				
+				if(ptsTo == mustPointsTo)
+					errs()<<" :Yes\n";
+				else
+					errs()<<" :No\n";
+
+				//errs()<<op1->getName()<<" must points to "<<op2->getName() <<" : ";
+				/*if(A_in.find(op1) != A_in.end()) {
 					if(A_in[op1].first.find(op2) != A_in[op1].first.end()) {
 						if((A_in[op1].first.size() == 1) && (A_in[op1].second == false)) {
 							errs()<<"Yes\n";
@@ -139,16 +233,25 @@ namespace {
 					}
 				} else {
 					errs()<<"Not live\n";
-				}
+				}*/
 			} else {
-				errs()<<op1->getName()<<" does not points to "<<op2->getName() <<" : ";
-				if(A_in.find(op1) != A_in.end()) {
+
+				errs()<<" does not points to ";
+				printOperand(opd2);
+
+				if(ptsTo == doesNotPointsTo)	
+					errs()<<" :Yes\n";
+				else
+					errs()<<" :No\n";
+
+				//errs()<<op1->getName()<<" does not points to "<<op2->getName() <<" : ";
+				/*if(A_in.find(op1) != A_in.end()) {
 					if(A_in[op1].first.find(op2) == A_in[op1].first.end())
 						errs()<<"Yes\n";
 					else
 						errs()<<"No\n";
 				} else 
-					errs()<<"Yes not live\n";
+					errs()<<"Yes not live\n";*/
 			}
 		}
 	}//Lfpa::printPointsToTestsAnswers
@@ -171,7 +274,7 @@ namespace {
 	* - calculates ref_n
 	* and inserts in IN
 	*/
-	std::set<Value *> Lfpa::getMayRefVariables(pointerPointeeMap A_in, operandInd opd, std::set<Value *> L_in, bool useInst) {
+	std::set<Value *> Lfpa::getMayRefVariables(pointerPointeeMap A_in, operandSet opd, std::set<Value *> L_in, bool useInst) {
 		std::set<Value *> refSet, tempSet;
 		int ind;
 		for(auto it : opd) {
@@ -459,7 +562,7 @@ errs()<<"\n";*/
 
 										if(rhsSet.size() == 0 || defnFreeRhs)
 											tA_out[itVal].second = true; //no definition obtained
-										else
+										else if(lhsSet.size()==1)
 											tA_out[itVal].second = false;
 
 										for(auto itVals : rhsSet){	//def_n X pointee_n
@@ -537,12 +640,18 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 				if(isa<StoreInst>(ip)) {
 
 					std::pair<Value *,int> op1;
-					std::set<std::pair<Value *, int>> op2;
+					//std::set<std::pair<Value *, int>> op2;
+					std::set<operand> op2;
 					lhsRhs opStruct = {op1, op2};
-					instOperandData[ip] = opStruct;
 					
-					findOperands(ip->getOperand(1),1,ip);
-					findOperands(ip->getOperand(0),0,ip);
+					auto lhsSet = findOperands(ip->getOperand(1),false);
+					opStruct.lhs = *(lhsSet.begin());
+					//for(auto lhsOp : lhsSet)
+					//	opStruct.lhs = lhsOp;
+					auto rhsSet = findOperands(ip->getOperand(0),false);
+					for(auto rhsOp : rhsSet)
+						opStruct.rhs.insert(rhsOp);
+					instOperandData[ip] = opStruct;
 
 				} else if(isa<CallInst>(ip)) {
 
@@ -557,20 +666,27 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 					} else if (originalName == "doesNotPointsTo") {
 						type = doesNotPointsTo;
 					} else {
-						assert(false && "other function calls not supported");
+						continue;
+						//assert(false && "other function calls not supported");
 					}
 
-					Value *op1 = ip->getOperand(0);
-					Value *op2 = ip->getOperand(1);
-					pointsToTest[ip] = std::make_tuple(op1, op2, type);
+					//Value *op1 = ip->getOperand(0);
+					//Value *op2 = ip->getOperand(1);
+					//assumption : only one operand 
+					auto opd1Set = findOperands(ip->getOperand(0),false);
+					auto opd2Set = findOperands(ip->getOperand(1),false);
+					pointsToTest[ip] = std::make_tuple(*(opd1Set.begin()), *(opd2Set.begin()), type);
 
 				} else if(isa<ICmpInst>(ip) || isa<ReturnInst>(ip)) {
 					useMap[ip];
 					
 					for(int i=0, numOp = ip->getNumOperands(); i < numOp; i++) {
 						Value *op = ip->getOperand(i);
-						if(!isa<ConstantData>(op))
-							findOperands(op,2,ip);
+						if(!isa<ConstantData>(op)) {
+							auto opdSet = findOperands(op,true);
+							for(auto opd : opdSet)
+								useMap[ip].insert(opd);
+						}
 					}
 					
 				}
@@ -578,16 +694,18 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 		}
 	}//Lfpa::initContext
 
-	void Lfpa::findOperands(Value *op, int opNo, Instruction *ip) {
+	std::set<std::pair<Value *, int>> Lfpa::findOperands(Value *op, bool use/*int opNo, Instruction *ip*/) {
 
-		std::stack<std::pair<Value *, int>> st;
-		if(opNo != 2)
+		//std::stack<std::pair<Value *, int>> st;
+		std::stack<operand> st;
+		operandSet opdSet;
+		if(/*opNo != 2*/ !use)
 			st.push(std::make_pair(op,-1));
 		else
 			st.push(std::make_pair(op,-2));
-		lhsRhs opStruct;
-		if(opNo != 2) //why without inclusion giving error
-			opStruct = instOperandData[ip];
+		//lhsRhs opStruct;
+		//if(opNo != 2) //why without inclusion giving error
+		//	opStruct = instOperandData[ip];
 
 		while(!st.empty()) {
 
@@ -597,7 +715,7 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 			if(isa<Instruction>(ele.first)) {
 				Instruction *tip = (Instruction *)ele.first;
 				if(isa<AllocaInst>(tip)) {
-					if(opNo == 1) {
+					/*if(opNo == 1) {
 						//LHS
 						opStruct.lhs = ele;
 					} else if(opNo == 0){
@@ -605,7 +723,8 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 						opStruct.rhs.insert(ele);
 					} else {
 						useMap[ip].insert(ele);
-					}
+					}*/
+					opdSet.insert(ele);
 				}else if(isa<LoadInst>(tip)) {
 					Value *ti = tip->getOperand(0);
 					if(!isa<ConstantData>(ti))
@@ -619,17 +738,19 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 					}
 				}
 			} else if (isa<GlobalVariable>(ele.first)) {
-				if(opNo == 1) { //LHS
+				/*if(opNo == 1) { //LHS
 					opStruct.lhs = ele;
 				} else if(opNo == 0) { //RHS
 					opStruct.rhs.insert(ele);
 				} else {
 					useMap[ip].insert(ele);
-				}
+				}*/
+				opdSet.insert(ele);
 			}
 		}
-		if(opNo != 2)
-			instOperandData[ip] = opStruct;
+		/*if(opNo != 2)
+			instOperandData[ip] = opStruct;*/
+		return opdSet;
 		
 	}//Lfpa::findOperands
 
@@ -660,14 +781,14 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 		
 	}//Lfpa::printLhsRhs
 
-	void Lfpa::printPointsToTests() {
+	/*void Lfpa::printPointsToTests() {
 		for(auto pt_it : pointsToTest) {
-			Value *op1, *op2;
+			operand op1, *op2;
 			PointsTo type;
 			std::tie(op1, op2, type) = pt_it.second;
 			errs()<<"type = "<<type<<"\nOperand 1 = "<<op1->getName()<<"\nOperand 2 = "<<op2->getName()<<"\n";
 		}
-	}//Lfpa::printPointsToTests
+	}//Lfpa::printPointsToTests*/
 
 	/*
 	* initLFPAstruct - inserts the various data structures in LFPA struct

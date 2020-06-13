@@ -1,14 +1,17 @@
-/*
- *Author- Prerona Chaudhuri
- *capture may points to of p
- */
 #include "myHeader.h"
+#include<iostream>
+#include<set>
+using namespace std;
 int d,e;
 int *p, *a;
 bool hi;
+set<int *> IN;
+set<int > OUT;
 int main() {
-	while(*p) {
-		mustPointsTo(a,d);
+	IN.insert(a);
+	OUT.insert(d);
+	while(hi) {
+		mustPointsTo(IN,OUT);
 		mayPointsTo(a,d);
 		p = a;
 		mustPointsTo(p,d);

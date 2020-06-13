@@ -15,7 +15,8 @@ int main(){
        
         u = *y;
     }
-    mayPointsTo(x,b);
+    mustPointsTo(x,w);
+    mayPointsTo(x,w);
     //func(y);
-    return *x;
+    return (*x+*u);
 }
