@@ -86,7 +86,7 @@ namespace {
 		//printLhsRhs();
 
 /*--------------------Perform Analysis----------------------*/
-		//int itCnt = 0;
+		int itCnt = 0;
 		bool changed,cL,cP;
 		do {
 			changed = false;
@@ -98,12 +98,13 @@ namespace {
 			//pointerAnalysis(fp);
 			cL = strongLivenessAnalysis(fp);
 			cP = pointerAnalysis(fp);
-			if(/*strongLivenessAnalysis(fp) && pointerAnalysis(fp)*/cL && cP) {
+			if(/*strongLivenessAnalysis(fp) && pointerAnalysis(fp)*/cL || cP) {
 				changed = true;
 				//errs()<<"cL = "<<cL<<" cP = "<<cP<<"\n";
 			} else{
 				printPointsToTestsAnswers();
 			}
+			
 			//itCnt++;
 		}while(changed);
 			
@@ -379,12 +380,13 @@ namespace {
 					Value *v = lOp.first;
 					lhsSet = getMayKillSet(A_in, lOp.first, &tL_in, &defnFreeLhs, &ind);
 					if(ind == -1) {
-						if(lhsSet.size() == 1 && !defnFreeLhs) { //must-kill
-							auto killVal = lhsSet.begin();
-							tL_in.erase(*killVal);
-						}
-						if(isLiveIn(lhsSet,tL_out)) //strong liveness
+						if(isLiveIn(lhsSet,tL_out)) {//strong liveness
+							if(lhsSet.size() == 1 && !defnFreeLhs) { //must-kill
+								auto killVal = lhsSet.begin();
+								tL_in.erase(*killVal);
+							}
 							tL_in = getMayRefVariables(A_in,rOp,tL_in,false);
+						}
 					}
 
 				} else if(isa<ICmpInst>(ip) || isa<ReturnInst>(ip)) {
@@ -403,6 +405,7 @@ namespace {
 
 
 				/*errs()<<"-----------------------------inst"<<ip<<"--------------------------\n";
+
 			errs()<<"IN la :\n";
 			for(auto it : tL_in) 
 				errs()<<it->getName()<<", ";
@@ -586,9 +589,9 @@ errs()<<"\n";*/
 				}
 
 
-/*errs()<<"-----------------------------inst"<<ip<<"--------------------------\n";
-
-errs()<<"IN pa :\n";
+//errs()<<"-----------------------------inst"<<ip<<"--------------------------\n";
+//errs()<<"changed! = "<<changed<<"\n";
+/*errs()<<"IN pa :\n";
 			for(auto it : tA_in) {
 				errs()<<it.first->getName()<<" -> ";
 				auto itSet = it.second.first;
@@ -613,6 +616,7 @@ errs()<<" Definition free path :"<<it.second.second<<"\n";
 			
 			}
 		}
+		//errs()<<"changed = "<<changed<<"\n";
 		return changed;
 	}//Lfpa::pointerAnalysis
 
