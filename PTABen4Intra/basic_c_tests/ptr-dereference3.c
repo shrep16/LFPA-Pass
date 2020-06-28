@@ -5,7 +5,7 @@
 
 }*/
 
-int *s,*r,**x,**y,t,z,k;
+int *s,*r,*x,**y,t,z,k;
 int main(){
 
 	s = &t;
@@ -17,9 +17,11 @@ int main(){
 	mustPointsTo(s,z);
 	k += *s;
 
-	x = y;
-	mustPointsTo(x,r);
-	k += **x;
+	mustPointsTo(y,r);
+	mustPointsTo(r,z);
+	x = *y;
+	mustPointsTo(x,z);
+	k += *x;
   
 	
 return k;

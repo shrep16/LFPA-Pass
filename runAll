@@ -1,0 +1,89 @@
+#!/bin/bash
+
+#script to run all the test cases
+#Properties:
+#1. Runs all the test files in the "test_dirs" folder
+#2. skips compiling if .bc newer than test case
+#3. .ll and .bc files stored in test_cases_ll and test_cases_bc respectively
+
+export LLVM_HOME=usr/lib/llvm-9
+
+#add the test directories here
+test_dirs="
+    lfpaTestSuite
+    PTABen4Intra/basic_c_tests
+    PTABen4Intra/complex_tests
+    PTABen4Intra/cs_tests
+    PTABen4Intra/fs_tests
+    PTABen4Intra/non_annotated_tests/intra-procedure
+    PTABen4Intra/path_tests
+"
+
+root=$(cd "$(dirname "$0")"; pwd)
+bc_dir_name="test_cases_bc"
+bc_path="$root/$bc_dir_name"
+ll_dir_name="test_cases_ll"
+ll_path="$root/$ll_dir_name"
+
+#check whether the parent bc folder exists
+if [ ! -d "$bc_path" ]; then
+	mkdir -p "$bc_path"
+fi
+
+#check whether the parent ll folder exists
+if [ ! -d "$ll_path" ]; then
+	mkdir -p "$ll_path"
+fi
+
+for td in $test_dirs; do
+	#create a directory for storing bit code
+	bc_td="$bc_path/$td"
+	mkdir -p "$bc_td"
+	
+	#create a directory for storing llvm ir
+	ll_td="$ll_path/$td"
+	mkdir -p "$ll_td"
+
+	#full path to the test directory
+	full_td="$root/$td"
+
+	for testCase in "$td/"*; do
+		ext=${testCase##*.}
+		fileName=${testCase%.*}
+
+		#check whether the testCase is .c/.cpp file
+		if [ \( "$ext" != "cpp" -a "$ext" != "c" \) -o "$ext" = "$f" ]; then
+			continue
+		fi
+
+		#ll and bc file name
+		ll_f="$ll_td/`basename "$fileName"`.ll"
+		bc_f="$bc_td/`basename "$fileName"`.bc"
+
+		#if .bc is newer than file then continue
+		if [ "$bc_f" -nt "$testCase" ]; then
+			echo "$0: Skipping: $testCase"
+			continue
+		fi
+
+		echo "$0: Compiling: $testCase"
+
+		compiler="clang++"
+		echo $ll_td
+
+		$compiler-9 -S -emit-llvm $testCase
+		llFileName="`basename "$fileName"`.ll"
+		opt-9 -S -instnamer "$llFileName" -o "$llFileName"
+		mv "$llFileName" "$ll_td"
+		mkdir -p _build
+		pushd _build
+		cmake ..
+		make
+		popd
+		$compiler-9 -S -emit-llvm "$testCase" -o "$bc_f"
+		opt-9 -instnamer -load _build/*/*lfpa* -lfpa "$bc_f" > /dev/null
+
+		echo "$0:        to: $ll_f and $bc_f"
+	done
+done
+

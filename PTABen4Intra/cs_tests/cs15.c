@@ -28,11 +28,14 @@ int main(){
 	int **y = c;
 	int *z = d;
 	int *t;
-	t = *x;
 	*y = z;
+	t = *x;
 	*w = t;
 	mustPointsTo(a,a1);
-	return **w+**x+**y+*z;
+	mustPointsTo(a1,d1);
+	mustPointsTo(b1,d1);
+	mustPointsTo(t,d1);
+	return **w+**x+**y+*z+*t;
 
 
 	//bar(a,b,c,d);
