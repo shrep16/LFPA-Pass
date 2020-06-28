@@ -7,7 +7,9 @@ Liveness based Flow sensitive Pointer Analysis (LFPA) Pass is a modified version
 * Supports C and C++ input test files
 
 
-For running all tests use : runAll -> include the test directories
+For running all tests use : runAll -> include the test directories. .ll amd .bc files to be found in dir test_cases_ll and test_cases_bc respectively. (These two new dirs will be created)
+
+
 single test use : test -> insert the actual test location
 
 
