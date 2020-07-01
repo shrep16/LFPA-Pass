@@ -49,7 +49,7 @@ void DfVal::printA(pointerPointeeMap A) {
 }//DfVal::printA
 
 void DfVal::printL(std::set<Value *> L) {
-	for(auto it : L_in) {
+	for(auto it : L) {
 		if(((Constant *)it)->isNullValue())
 			errs()<<"?, ";
 		else

@@ -48,13 +48,13 @@ namespace {
 		initContext(fp);
 		
 /*--------------------Perform Analysis----------------------*/
-		//int itCnt = 0;
+		int itCnt = 0;
 		bool changed,cL,cP;
 		do {
 			changed = false;
 			cL = false;
 			cP = false;
-//errs()<<"iteration"<<itCnt<<"\n";
+errs()<<"iteration"<<itCnt<<"\n";
 //if strongLivenessAnalysis is true but pointerAnalysis is false then changed is false
 			cL = strongLivenessAnalysis(fp);
 			cP = pointerAnalysis(fp);
@@ -64,7 +64,7 @@ namespace {
 				printPointsToTestsAnswers();
 			}
 			
-			//itCnt++;
+			itCnt++;
 		}while(changed);
 			
 /*--------------------Perform Analysis----------------------*/
@@ -84,7 +84,6 @@ namespace {
 			type = opdObj.getInstType();
 			opd1 = opdSet[0];
 			opd2 = opdSet[1];
-			//opd1 = *(std::next(opdSet.begin(), 1));
 
 			int opd1Ind = opd1.second;
 			int opd2Ind = opd2.second;
@@ -228,10 +227,12 @@ namespace {
 				ip = &(*ii);
 				auto ipStruct = instAnalysisData[ip];
 				pointerPointeeMap tA_in, tA_out;
+				auto Lout = ipStruct.getLout();
+				auto Lin = ipStruct.getLin();
 				
 				/*-----------------------calculate IN--------------------------*/
 				auto predInstSet = getPredecessors(ii,bp);
-				for(auto itVal : ipStruct.getLin()) {
+				for(auto itVal : Lin) {
 					if(itVal->getType()->getContainedType(0)->isPointerTy()) {
 						if(tA_in.find(itVal) != tA_in.end()) {
 							std::set<Value *> pointees;		
@@ -270,7 +271,7 @@ namespace {
 				
 
 				for(auto itVal : tA_in) {
-					if(ipStruct.getLout().find(itVal.first) != ipStruct.getLout().end()) {
+					if(Lout.find(itVal.first) != Lout.end()) {
 						if(tA_out.find(itVal.first) == tA_out.end()) {
 							std::set<Value *> pointees;			
 							tA_out.insert(std::pair<Value *, std::set<Value*>>(itVal.first, pointees));	
@@ -279,6 +280,8 @@ namespace {
 							tA_out[itVal.first].insert(itValue);
 					}
 				}
+
+
 
 				if(isa<StoreInst>(ip)) {
 					if(ip->getOperand(1)->getType()->isPointerTy()) {
@@ -291,12 +294,14 @@ namespace {
 							indL = lOp.second;
 							indR = rOp.begin()->second;
 							
+
 							lhsSet = ipStruct.getDefRefSet(lOp.first, tA_in, &indL); //def set
 							rhsSet = ipStruct.getDefRefSet(rOp.begin()->first, tA_in, &indR); //pointee set
 							
 							if(indR == -1 && indL == -1) {
+
 								for(auto itVal : lhsSet) {
-									if(ipStruct.getLout().find(itVal) != ipStruct.getLout().end()) {
+									if(Lout.find(itVal) != Lout.end()) {
 										if(tA_out.find(itVal) == tA_out.end() && rhsSet.size() != 0) {
 											std::set<Value *> pointees;
 											tA_out.insert(std::pair<Value *,std::set<Value*>>
