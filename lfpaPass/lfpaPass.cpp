@@ -48,13 +48,13 @@ namespace {
 		initContext(fp);
 		
 /*--------------------Perform Analysis----------------------*/
-		int itCnt = 0;
+		//int itCnt = 0;
 		bool changed,cL,cP;
 		do {
 			changed = false;
 			cL = false;
 			cP = false;
-errs()<<"iteration"<<itCnt<<"\n";
+//errs()<<"iteration"<<itCnt<<"\n";
 //if strongLivenessAnalysis is true but pointerAnalysis is false then changed is false
 			cL = strongLivenessAnalysis(fp);
 			cP = pointerAnalysis(fp);
@@ -64,7 +64,7 @@ errs()<<"iteration"<<itCnt<<"\n";
 				printPointsToTestsAnswers();
 			}
 			
-			itCnt++;
+			//itCnt++;
 		}while(changed);
 			
 /*--------------------Perform Analysis----------------------*/
