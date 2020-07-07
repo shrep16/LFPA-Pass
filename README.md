@@ -27,11 +27,14 @@ single test use : *test* -> insert the actual test location
 
 *Directions for writing test cases* :
 1. Make sure you include the header file -myHeader.h
-2. Refer *lfpaTestSuite/test5.cpp* and *lfpaTestSuite/test6.cpp* for writing tests
+2. Define TYPE1 and TYPE2 accordingly in the test cases
+3. Refer *lfpaTestSuite/test5.cpp* and *lfpaTestSuite/test6.cpp* for writing tests
 
 *Test Cases* :
 1. (PTABen4Intra)adapting test cases from PTABen - https://github.com/SVF-tools/Test-Suite
 2. (lfpaTestSuite) some test cases for intra-procedural 
+
+Have a look at the :
 
 
 Presentation: https://docs.google.com/presentation/d/1Lu--EV4rWhoLj0a8NTK8L5s_gl4O3FP_oCqhd9qSmA0/edit?usp=sharing
