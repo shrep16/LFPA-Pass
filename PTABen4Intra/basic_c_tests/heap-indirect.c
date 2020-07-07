@@ -6,7 +6,12 @@
  *		allocation sites.
  */
 //#include "aliascheck.h"
+#define TYPE1 void *
+#define TYPE2 void *
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 #include "malloc.h"
 // return two malloc object
 /*void malloc_two(int **p, int **q) {

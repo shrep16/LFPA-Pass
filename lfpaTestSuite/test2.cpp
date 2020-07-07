@@ -1,4 +1,9 @@
+#define TYPE1 int *
+#define TYPE2 int
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 
 int **y, *v, **z, *u, *x, w, b,a,c,p;
 

@@ -4,7 +4,12 @@
  * Date: 11/10/2013
  */
 //#include "aliascheck.h"
+#define TYPE1 void *
+#define TYPE2 void *
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 	int **x1, **y1, **z1;
 	int *x2, *y2, *z2, *y2_;
 	int x3, y3, z3, y3_;

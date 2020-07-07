@@ -1,5 +1,10 @@
 //capture may points To of a
+#define TYPE1 void *
+#define TYPE2 void *
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 
 int **p, *q,*a,b,c;
 int main(){

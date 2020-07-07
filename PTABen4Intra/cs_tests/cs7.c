@@ -4,7 +4,12 @@ void foo(int **p, int **q){
 	*q = *p;
 
 }*/
+#define TYPE1 void *
+#define TYPE2 void *
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 
 	int **a,**b,**c,**d,**e,**f,*x,*y,*z,*w,*k,x1,y1,z1,w1,k1;
 

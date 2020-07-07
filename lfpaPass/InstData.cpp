@@ -1,6 +1,6 @@
 using namespace llvm;
 
-class OpdData{
+class InstData{
 	public :
 		enum InstType {
 			Store = 0,	//store inst
@@ -22,8 +22,8 @@ class OpdData{
 		std::set<std::pair<Value *, int>> opdList;
 		std::vector<std::pair<Value *,int>> argList;
 	public :
-		OpdData();		
-		OpdData(InstType ttype) {
+		InstData() {}		
+		InstData(InstType ttype) {
 			type = ttype;
 			//inlined
 		}
@@ -41,51 +41,15 @@ class OpdData{
 		void printLhsRhs();
 		void printUse();
 		void printFuncArg();
-		operandSet findOperands(Value *, bool);
 		InstType getInstType();
 		void setInstType(InstType);
-}; //end OpdData
+		operandSet findOperands(Value *);
+		bool IsCallInst();
+}; //end InstData
 
-std::set<std::pair<Value *, int>> OpdData::findOperands(Value *op, bool use) {
-	std::stack<operand> st;
-	operandSet opdSet;
-	if(!use)
-		st.push(std::make_pair(op,-1));
-	else
-		st.push(std::make_pair(op,-2));
-		
-	while(!st.empty()) {
-
-		auto ele = st.top();
-		st.pop();
-
-		if(isa<Instruction>(ele.first)) {
-			Instruction *tip = (Instruction *)ele.first;
-			if(isa<AllocaInst>(tip)) {
-				opdSet.insert(ele);
-			}else if(isa<LoadInst>(tip)) {
-				Value *ti = tip->getOperand(0);
-				if(!isa<ConstantData>(ti))
-					 st.push(std::make_pair(ti,ele.second+1));
-			}else {
-				for(int i=0, numOp = tip->getNumOperands(); i < numOp; i++) {
-					Value *ti = tip->getOperand(i);						
-					if(!isa<ConstantData>(ti)) {
-						st.push(std::make_pair(ti,ele.second));
-					}
-				}
-			}
-		} else if (isa<GlobalVariable>(ele.first)) {
-			opdSet.insert(ele);
-		}
-	}
-	return opdSet;
-		
-}//OpdData::findOperands
-
-void OpdData::printOperand(operand opd) {
+void InstData::printOperand(operand opd) {
 	int ind = opd.second;
-	while(ind > -1) {
+	while(ind > StartInd) {
 		errs()<<"*";
 		ind--;
 	}
@@ -94,9 +58,9 @@ void OpdData::printOperand(operand opd) {
 	else
 		errs()<<opd.first->getName();
 		
-}//OpdData::printOperand
+}//InstData::printOperand
 
-OpdData::InstType OpdData::whetherPointsTo(std::set<Value *> opd1Set, std::set<Value *> opd2Set, pointerPointeeMap A_in) {
+InstData::InstType InstData::whetherPointsTo(std::set<Value *> opd1Set, std::set<Value *> opd2Set, pointerPointeeMap A_in) {
 	InstType ptsTo = DoesNotPointsTo;
 	for(auto ptr : opd1Set) {
 		if(A_in.find(ptr) != A_in.end()) {//ptr could be an integer as well
@@ -117,9 +81,9 @@ OpdData::InstType OpdData::whetherPointsTo(std::set<Value *> opd1Set, std::set<V
 		}
 	}
 	return ptsTo;
-}//OpdData::whetherPointsTo
+}//InstData::whetherPointsTo
 
-void OpdData::printLhsRhs() {
+void InstData::printLhsRhs() {
 	if(type != Store)
 		assert(false && "Not a store instruction!");
 	printOperand(lhs);
@@ -129,10 +93,10 @@ void OpdData::printLhsRhs() {
 		errs()<<", ";
 	}
 	errs()<<"\n";
-}//OpdData::printLhsRhs
+}//InstData::printLhsRhs
 
-void OpdData::printFuncArg() {
-	if(!(type == Call || type == MayPointsTo || type == MustPointsTo || type == DoesNotPointsTo))
+void InstData::printFuncArg() {
+	if(!IsCallInst())
 		assert(false && "Not a call instruction!");
 
 	for(auto it : argList) {
@@ -140,9 +104,9 @@ void OpdData::printFuncArg() {
 		errs()<<", ";
 	}
 	errs()<<"\n";	
-}//OpdData::printFuncArg
+}//InstData::printFuncArg
 
-void OpdData::printUse() {
+void InstData::printUse() {
 	if(type != Use)
 		assert(false && "Not a compare or return instruction!");
 
@@ -151,63 +115,113 @@ void OpdData::printUse() {
 		errs()<<", ";
 	}
 	errs()<<"\n";
-}//OpdData::printUse
+}//InstData::printUse
 
-inline std::pair<Value *, int> OpdData::getLHS() {
+inline std::pair<Value *, int> InstData::getLHS() {
 	if(type != Store)
 		assert(false && "Not a store instruction!");
 	return lhs;
-}//OpdData::getLHS
+}//InstData::getLHS
 
-inline std::set<std::pair<Value *, int>> OpdData::getRHS() {
+inline std::set<std::pair<Value *, int>> InstData::getRHS() {
 	if(type != Store)
 		assert(false && "Not a store instruction!");
 	return opdList;
-}//OpdData::getRHS
+}//InstData::getRHS
 
-inline std::vector<std::pair<Value *, int>> OpdData::getFuncArg() {
-	if(!(type == Call || type == MayPointsTo || type == MustPointsTo || type == DoesNotPointsTo))
+inline std::vector<std::pair<Value *, int>> InstData::getFuncArg() {
+	if(!IsCallInst())
 		assert(false && "Not a call instruction!");
 	return argList;
-}//OpdData::getFuncArg
+}//InstData::getFuncArg
 
-inline std::set<std::pair<Value *, int>> OpdData::getUse() {
+inline std::set<std::pair<Value *, int>> InstData::getUse() {
 	if(type != Use)
 		assert(false && "Not a compare or store instruction!");
 	return opdList;
-}//OpdData::getUse
+}//InstData::getUse
 
-inline void OpdData::setLHS(operand opd) {
+inline void InstData::setLHS(operand opd) {
 	if(type != Store)
 		assert(false && "Not a store instruction!");
 	lhs = opd;
-}//OpdData::setLHS
+}//InstData::setLHS
 
-void OpdData::setRHS(operandSet opdSet) {
+void InstData::setRHS(operandSet opdSet) {
 	if(type != Store)
 		assert(false && "Not a store instruction!");
 	for(auto it : opdSet)
 		opdList.insert(it);
-}//OpdData::setRHS
+}//InstData::setRHS
 
-void OpdData::setUse(operandSet opdSet) {
+void InstData::setUse(operandSet opdSet) {
 	if(type != Use)
 		assert(false && "Not a compare or store instruction!");
 	for(auto it : opdSet)
 		opdList.insert(it);
-}//OpdData::setUse
+}//InstData::setUse
 
-void OpdData::setFuncArg(operandSet opdSet) {
-	if(!(type == Call || type == MayPointsTo || type == MustPointsTo || type == DoesNotPointsTo))
+void InstData::setFuncArg(operandSet opdSet) {
+	if(!IsCallInst())
 		assert(false && "Not a call instruction!");
 	for(auto it : opdSet)
 		argList.push_back(it);
-}//OpdData::setFuncArg
+}//InstData::setFuncArg
 
-inline OpdData::InstType OpdData::getInstType() {
+inline InstData::InstType InstData::getInstType() {
 	return type;
-}//OpdData::getInstType
+}//InstData::getInstType
 
-inline void OpdData::setInstType(InstType ttype) {
+inline void InstData::setInstType(InstType ttype) {
 	type = ttype;
-}//OpdData::setInstType
+}//InstData::setInstType
+
+inline bool InstData::IsCallInst() {
+	if(type == Call || type == MustPointsTo || type == MayPointsTo || type == DoesNotPointsTo)
+		return true;
+	return false;
+}//InstData::IsCallInst
+
+std::set<std::pair<Value *, int>> InstData::findOperands(Value *op) {
+	std::stack<operand> st;
+	operandSet opdSet;
+	if(type == Store)
+		st.push(std::make_pair(op,StartInd));
+	else
+		st.push(std::make_pair(op,StartInd-1));
+		
+	while(!st.empty()) {
+
+		auto ele = st.top();
+		st.pop();
+
+		if(isa<Instruction>(ele.first)) {
+			Instruction *tip = (Instruction *)ele.first;
+			if(isa<AllocaInst>(tip)) {
+				if(ele.first->getType()->getContainedType(0)->isPointerTy() 
+				   || IsCallInst()
+				   || type == Store)
+					opdSet.insert(ele);
+			}else if(isa<LoadInst>(tip)) {
+				Value *ti = tip->getOperand(0);
+				if(!isa<ConstantData>(ti))
+					 st.push(std::make_pair(ti,ele.second+1));
+			}else {
+				for(int i=0, numOp = tip->getNumOperands(); i < numOp; i++) {
+					Value *ti = tip->getOperand(i);						
+					if(!isa<ConstantData>(ti)) {
+						st.push(std::make_pair(ti,ele.second));
+					}
+				}
+			}
+		} else if (isa<GlobalVariable>(ele.first)) {
+			if(ele.first->getType()->getContainedType(0)->isPointerTy() 
+		           || IsCallInst()
+			   || type == Store)
+				opdSet.insert(ele);
+		}
+	}
+	return opdSet;
+		
+}//InstData::findOperands
+

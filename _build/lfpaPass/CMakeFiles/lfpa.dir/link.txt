@@ -1,0 +1,1 @@
+/usr/lib/llvm-9/bin/clang++ -fPIC   -shared  -o liblfpa.so CMakeFiles/lfpa.dir/lfpaPass.cpp.o   -L/usr/lib/llvm-9/lib 

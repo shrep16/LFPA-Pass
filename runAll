@@ -68,7 +68,14 @@ for td in $test_dirs; do
 
 		echo "$0: Compiling: $testCase"
 
-		compiler="clang++"
+		#set the compiler accordingly
+		compiler=""
+		if [ "$ext" = "c" ]; then
+			compiler="clang"
+		else
+			compiler="clang++"
+		fi
+
 		echo $ll_td
 
 		$compiler-9 -S -emit-llvm $testCase

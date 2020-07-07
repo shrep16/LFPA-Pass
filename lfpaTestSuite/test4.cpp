@@ -1,4 +1,4 @@
-#include "myHeader.h"
+//#include "myHeader.h"
 
 int **z,*x,**y;
 int *v,*u,w;

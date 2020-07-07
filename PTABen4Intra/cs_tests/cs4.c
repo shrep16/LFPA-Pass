@@ -1,4 +1,9 @@
+#define TYPE1 void *
+#define TYPE2 void *
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 /*#include "aliascheck.h"
 void foo(int **x,int**y,int **z, int *w){
 	int *t;

@@ -1,7 +1,12 @@
 //capture must points to of x at different program points
 //capture must points to of *x at different program points
 //good program :)
+#define TYPE1 void *
+#define TYPE2 void *
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 int t;
 int **x, **y;
 int *a, *b, *c, *d,e;

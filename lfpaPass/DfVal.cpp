@@ -100,7 +100,7 @@ std::set<Value *> DfVal::getMayDefVariables(pointerPointeeMap A, Value *Op, std:
 	std::set<Value *> mayDefSet, tempSet;
 	mayDefSet.insert(Op);
 						
-	while(*ind > -1 && mayDefSet.size() > 0 ) {
+	while(*ind > StartInd && mayDefSet.size() > 0 ) {
 		for(auto itVal : mayDefSet) {
 			L->insert(itVal);
 			if(A.find(itVal) != A.end()) {
@@ -128,18 +128,19 @@ std::set<Value *> DfVal::getMayRefVariables(pointerPointeeMap A, operandSet opd,
 		refSet.insert(it.first);
 		ind = it.second;
 
-		if(useInst || (!useInst && ind != -1))
+		if(useInst || (!useInst && ind != StartInd))
 			L.insert(it.first);
 
 
-		while(ind > -1 && refSet.size() > 0) {
+		while(ind > StartInd && refSet.size() > 0) {
 			ind--;
 			for(auto itValue : refSet) {
 				if(A.find(itValue) != A.end()) {
 					for(auto itVal : A.find(itValue)->second) {
 						tempSet.insert(itVal);
-						if(useInst || (!useInst && ind != -1))
-							L.insert(itVal);
+						if(useInst || (!useInst && ind != StartInd))
+							if(itVal->getType()->getContainedType(0)->isPointerTy())
+								L.insert(itVal); //don't insert scalars
 					}				
 				}
 			}
@@ -156,7 +157,7 @@ std::set<Value *> DfVal::getMayRefVariables(pointerPointeeMap A, operandSet opd,
 std::set<Value *> DfVal::getDefRefSet(Value *op, pointerPointeeMap A, int *ind) {
 	std::set<Value *> defRefSet, tempSet;
 	defRefSet.insert(op);
-	while(*ind > -1 && defRefSet.size()>0) {
+	while(*ind > StartInd && defRefSet.size()>0) {
 		for(auto itVal : defRefSet) {
 			if(A.find(itVal) != A.end()) {
 				for(auto it : A.find(itVal)->second)

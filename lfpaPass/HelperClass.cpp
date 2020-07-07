@@ -1,6 +1,9 @@
 using namespace llvm;
 
 class HelperClass {
+	private :
+		using operand = std::pair<Value *, int>;
+		using operandSet = std::set<operand>;
 	public :
 		std::set<Instruction *> getPredecessors(BasicBlock::iterator, BasicBlock *);
 		std::set<Instruction *> getSuccessors(BasicBlock::reverse_iterator, BasicBlock *);
@@ -10,10 +13,9 @@ class HelperClass {
 
 inline std::string HelperClass::getOriginalName(Function *calledFunction) {
 	std::string s1 = demangle(calledFunction->getName().str().c_str());
-        size_t found = s1.find('<');
-        size_t found1 = s1.find(' ');
-        if(found!=std::string::npos and found1!=std::string::npos)
-           	s1 = std::string(s1.begin()+found1+1, s1.begin()+found);
+        size_t found = s1.find('(');
+        if(found!=std::string::npos)
+           	s1 = std::string(s1.begin(), s1.begin()+found);
         return s1;
 }//HelperClass::getOriginalName
 
@@ -50,4 +52,6 @@ std::set<Instruction *> HelperClass::getSuccessors(BasicBlock::reverse_iterator 
 	return succInstSet;
 		
 }//HelperClass::getSuccessors
+
+
 

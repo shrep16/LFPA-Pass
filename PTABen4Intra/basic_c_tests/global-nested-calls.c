@@ -6,7 +6,12 @@
  *		in caller.
  */
 //#include "aliascheck.h"
+#define TYPE1 void *
+#define TYPE2 void *
 #include "myHeader.h"
+#undef TYPE1
+#undef TYPE2
+
 int **pp, **qq;
 int *p, *q;
 int x;

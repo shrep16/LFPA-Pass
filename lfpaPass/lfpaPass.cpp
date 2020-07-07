@@ -11,9 +11,12 @@
 #include <cxxabi.h>
 #include <cassert>
 
+//set your starting indirection accordingly
+#define StartInd -1
+
 #include "DfVal.cpp"
 #include "HelperClass.cpp"
-#include "OpdData.cpp"
+#include "InstData.cpp"
 
 using namespace llvm;
 
@@ -25,8 +28,8 @@ namespace {
 			using operand = std::pair<Value *, int>;
 			using operandSet = std::set<operand>;
 			std::map<Instruction *, DfVal> instAnalysisData;
-			std::map<Instruction *, OpdData> instOperandData;
-			std::map<Instruction *, OpdData> pointsToTest;
+			std::map<Instruction *, InstData> instOperandData;
+			std::map<Instruction *, InstData> pointsToTest;
 			Constant *nullValue;
 			
 		public :
@@ -77,7 +80,7 @@ namespace {
 			auto A_in = ipStruct.getAin();
 			auto opdObj = test.second;
 			
-			OpdData::InstType type, ptsTo;
+			InstData::InstType type, ptsTo;
 			operand opd1, opd2;
 			
 			auto opdSet = opdObj.getFuncArg();
@@ -90,7 +93,7 @@ namespace {
 			auto opd1Set = ipStruct.getDefRefSet(opd1.first, A_in, &opd1Ind);
 			auto opd2Set = ipStruct.getDefRefSet(opd2.first, A_in, &opd2Ind);
 			
-			if(opd1Ind != -1 || opd2Ind != -1) {
+			if(opd1Ind != StartInd || opd2Ind != StartInd) {
 				errs()<<"No variables found!\n";
 				continue;
 			}
@@ -105,22 +108,22 @@ namespace {
 				continue;
 			}
 
-			if(type == OpdData::MayPointsTo) {
+			if(type == InstData::MayPointsTo) {
 
 				
 				errs()<<" may points to ";
 				opdObj.printOperand(opd2);
-				if(ptsTo != OpdData::DoesNotPointsTo)
+				if(ptsTo != InstData::DoesNotPointsTo)
 					errs()<<" :Yes\n";
 				else
 					errs()<<" :No \n";
 
-			} else if(type == OpdData::MustPointsTo) {
+			} else if(type == InstData::MustPointsTo) {
 
 				errs()<<" must points to ";
 				opdObj.printOperand(opd2);
 				
-				if(ptsTo == OpdData::MustPointsTo)
+				if(ptsTo == InstData::MustPointsTo)
 					errs()<<" :Yes\n";
 				else
 					errs()<<" :No\n";
@@ -130,7 +133,7 @@ namespace {
 				errs()<<" does not points to ";
 				opdObj.printOperand(opd2);
 
-				if(ptsTo == OpdData::DoesNotPointsTo)	
+				if(ptsTo == InstData::DoesNotPointsTo)	
 					errs()<<" :Yes\n";
 				else
 					errs()<<" :No\n";
@@ -163,32 +166,35 @@ namespace {
 				/*--------------------------calculate IN-----------------------------*/
 				
 				tL_in = tL_out;
-				if(isa<StoreInst>(ip)) {
-					auto opdObj = instOperandData[ip];
-					auto lOp = opdObj.getLHS();
-					auto rOp = opdObj.getRHS();
-					auto A_in = ipStruct.getAin();
+				auto it = instOperandData.find(ip);
+				if(it != instOperandData.end()) {
+					auto opdObj = it->second;
+					InstData::InstType type = opdObj.getInstType();
+					if(type == InstData::Store) {
+						auto lOp = opdObj.getLHS();
+						auto rOp = opdObj.getRHS();
+						auto A_in = ipStruct.getAin();
 					
-					std::set<Value *> lhsSet;
-					int ind = lOp.second;
-					Value *v = lOp.first;
-					lhsSet = ipStruct.getMayDefVariables(A_in, lOp.first, &tL_in,&ind);
+						std::set<Value *> lhsSet;
+						int ind = lOp.second;
+						Value *v = lOp.first;
+						lhsSet = ipStruct.getMayDefVariables(A_in, lOp.first, &tL_in,&ind);
 
-					if(ind == -1) {
-						if(ipStruct.isLiveIn(lhsSet,tL_out)) {//strong liveness
-							if(lhsSet.size() == 1) { //must-kill
-								auto killVal = lhsSet.begin();
-								tL_in.erase(*killVal);
+						if(ind == StartInd) {
+							if(ipStruct.isLiveIn(lhsSet,tL_out)) {//strong liveness
+								if(lhsSet.size() == 1) { //must-kill
+									auto killVal = lhsSet.begin();
+									tL_in.erase(*killVal);
+								}
+								tL_in = ipStruct.getMayRefVariables(A_in,rOp,tL_in,false);
 							}
-							tL_in = ipStruct.getMayRefVariables(A_in,rOp,tL_in,false);
 						}
-					}
 
-				} else if(isa<ICmpInst>(ip) || isa<ReturnInst>(ip)) {
-					auto opdObj = instOperandData[ip];
-					auto A_in = ipStruct.getAin();
-					tL_in = ipStruct.getMayRefVariables(A_in,opdObj.getUse(),tL_in,true);
-				} 
+					} else if(type == InstData::Use) {
+						auto A_in = ipStruct.getAin();
+						tL_in = ipStruct.getMayRefVariables(A_in,opdObj.getUse(),tL_in,true);
+					} 
+				}
 
 
 
@@ -209,10 +215,6 @@ namespace {
 
 			}
 		}
-		
-
-		
-
 		return changed;
 	}//Lfpa::strongLivenessAnalysis
 
@@ -281,41 +283,42 @@ namespace {
 					}
 				}
 
+				auto it = instOperandData.find(ip);
+				if(it != instOperandData.end()) {
 
+					auto opdObj = it->second;
+					InstData::InstType type = opdObj.getInstType();
 
-				if(isa<StoreInst>(ip)) {
-					if(ip->getOperand(1)->getType()->isPointerTy()) {
-						if(ip->getOperand(1)->getType()->getContainedType(0)->isPointerTy()) {
-							std::set<Value *> lhsSet, rhsSet,newSet;
-							auto opdObj = instOperandData[ip];
-							auto rOp = opdObj.getRHS();
-							auto lOp = opdObj.getLHS();
-							int indL,indR;
-							indL = lOp.second;
-							indR = rOp.begin()->second;
+					if(type == InstData::Store) {
+						std::set<Value *> lhsSet, rhsSet,newSet;
+							
+						auto rOp = opdObj.getRHS();
+						auto lOp = opdObj.getLHS();
+						int indL,indR;
+						indL = lOp.second;
+						indR = rOp.begin()->second;
 							
 
-							lhsSet = ipStruct.getDefRefSet(lOp.first, tA_in, &indL); //def set
-							rhsSet = ipStruct.getDefRefSet(rOp.begin()->first, tA_in, &indR); //pointee set
+						lhsSet = ipStruct.getDefRefSet(lOp.first, tA_in, &indL); //def set
+						rhsSet = ipStruct.getDefRefSet(rOp.begin()->first, tA_in, &indR); //pointee set
 							
-							if(indR == -1 && indL == -1) {
+						if(indR == StartInd && indL == StartInd) {
 
-								for(auto itVal : lhsSet) {
-									if(Lout.find(itVal) != Lout.end()) {
-										if(tA_out.find(itVal) == tA_out.end() && rhsSet.size() != 0) {
-											std::set<Value *> pointees;
-											tA_out.insert(std::pair<Value *,std::set<Value*>>
-												      (itVal,pointees));	
-										}
-										if(lhsSet.size() == 1)
-											tA_out[itVal].clear();//must update //kill
+							for(auto itVal : lhsSet) {
+								if(Lout.find(itVal) != Lout.end()) {
+									if(tA_out.find(itVal) == tA_out.end() && rhsSet.size() != 0) {
+										std::set<Value *> pointees;
+										tA_out.insert(std::pair<Value *,std::set<Value*>>
+											      (itVal,pointees));	
+									}
+									if(lhsSet.size() == 1)
+										tA_out[itVal].clear();//must update //kill
 
-										if(rhsSet.size() == 0)
-											tA_out[itVal].insert(nullValue);
-										else {
-											for(auto itVals : rhsSet) //def_n X pointee_n
-												tA_out[itVal].insert(itVals);
-										}
+									if(rhsSet.size() == 0)
+										tA_out[itVal].insert(nullValue);
+									else {
+										for(auto itVals : rhsSet) //def_n X pointee_n
+											tA_out[itVal].insert(itVals);
 									}
 								}
 							}
@@ -362,56 +365,75 @@ namespace {
 				instAnalysisData.insert(std::pair<Instruction *, DfVal>(ip, dfValObj));
 
 				if(isa<StoreInst>(ip)) {
-					OpdData::InstType type= OpdData::Store;
-					OpdData opdObj(type);
-					
-					auto lhsSet = opdObj.findOperands(ip->getOperand(1),false);
-					opdObj.setLHS(*(lhsSet.begin()));
-					auto rhsSet = opdObj.findOperands(ip->getOperand(0),false);
-					opdObj.setRHS(rhsSet);
-					instOperandData.insert(std::pair<Instruction *, OpdData>(ip, opdObj));
+					InstData::InstType type;
+					operandSet lhsSet, rhsSet;
 
-				} else if(isa<CallInst>(ip)) {
+					if(ip->getOperand(1)->getType()->getContainedType(0)->isPointerTy()) {
+						type = InstData::Store;	
+					} else {
+						type = InstData::Use;
+					}
+					InstData opdObj(type);
+					rhsSet = opdObj.findOperands(ip->getOperand(0));
+					
+		
+					if(rhsSet.size() != 0) {
+
+						
+						if(type == InstData::Store) {
+							lhsSet = opdObj.findOperands(ip->getOperand(1));
+							opdObj.setLHS(*(lhsSet.begin()));
+							opdObj.setRHS(rhsSet);
+						} else {
+							opdObj.setUse(rhsSet);
+						}
+						
+
+						instOperandData.insert(std::pair<Instruction *, InstData>(ip, opdObj));
+					} //ELSE will be automatically deleted if opdObj not use
+
+				} else if(isa<CallInst>(ip) && ip->getNumOperands() > 1) {
 
 					Function *calledFp = cast<CallInst>(ip)->getCalledFunction();
 					std::string originalName = getOriginalName(calledFp);
-
-					OpdData::InstType type= OpdData::Call;
+					InstData::InstType type= InstData::Call;
 					if(originalName == "mayPointsTo") {
-						type = OpdData::MayPointsTo;
+						type = InstData::MayPointsTo;
 					} else if (originalName == "mustPointsTo") {
-						type = OpdData::MustPointsTo;
+						type = InstData::MustPointsTo;
 					} else if (originalName == "doesNotPointsTo") {
-						type = OpdData::DoesNotPointsTo;
+						type = InstData::DoesNotPointsTo;
 					}
-					OpdData opdObj(type);
+					InstData opdObj(type);
 					for(int i=0, numOp = ip->getNumOperands(); i< numOp; i++) {
 						Value *op = ip->getOperand(i);
 						operandSet opdSet;
 						if(!isa<ConstantData>(op)) {
-							opdSet = opdObj.findOperands(op, false);
+							opdSet = opdObj.findOperands(op);
 						} else {
-							opdSet.insert(std::pair<Value *, int>(op,-1));
+							opdSet.insert(std::pair<Value *, int>(op,StartInd));
 						}
 						opdObj.setFuncArg(opdSet);
 					}
-					if(type == OpdData::Call) {
-						instOperandData.insert(std::pair<Instruction *, OpdData>(ip, opdObj));
+
+					if(type == InstData::Call) {
+						instOperandData.insert(std::pair<Instruction *, InstData>(ip, opdObj));
 					} else {
-						pointsToTest.insert(std::pair<Instruction *, OpdData>(ip, opdObj));
+						pointsToTest.insert(std::pair<Instruction *, InstData>(ip, opdObj));
 					}
 
 				} else if(isa<ICmpInst>(ip) || isa<ReturnInst>(ip)) {
-					OpdData::InstType type= OpdData::Use;
-					OpdData opdObj(type);
+					InstData::InstType type= InstData::Use;
+					InstData opdObj(type);
 					for(int i=0, numOp = ip->getNumOperands(); i < numOp; i++) {
 						Value *op = ip->getOperand(i);
 						if(!isa<ConstantData>(op)) {
-							auto opdSet = opdObj.findOperands(op,true);
+							auto opdSet = opdObj.findOperands(op);
 							opdObj.setUse(opdSet);
 						}
 					}
-					instOperandData.insert(std::pair<Instruction *, OpdData>(ip, opdObj));
+
+					instOperandData.insert(std::pair<Instruction *, InstData>(ip, opdObj));
 					
 				}
 			}
