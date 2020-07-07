@@ -1,6 +1,8 @@
 # LFPA-Pass
 Liveness based Flow sensitive Pointer Analysis (LFPA) Pass is a modified version of pointer analysis that performs flow sensitive pointer analysis. It combines strong liveness and pointer analysis. It can be also extended to context sensitivity(LFCPA). It improves on scalability factors. This pass is implemented in LLVM.
 
+Checkout the paper for understanding LFCPA : https://dl.acm.org/doi/10.5555/2414936.2414957
+
 * Supports : Global and Local Variables (pointers); all control flow constructs (if-else, while/for)
 * Future Scope : Structures and Arrays
 * This is an out of tree pass
@@ -41,5 +43,10 @@ Presentation: https://docs.google.com/presentation/d/1Lu--EV4rWhoLj0a8NTK8L5s_gl
 
 
 For detailed documentation of the implementation refer : https://docs.google.com/document/d/1CLHMf6lyDE-exAeLnAtmUjcTEwOevsGziMJWizimEuo/edit
+
+Having Questions/Troubles :
+Ask them here by raising an issue! :) 
+
+Thanks for visiting!
 
 
